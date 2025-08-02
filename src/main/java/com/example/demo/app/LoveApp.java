@@ -1,13 +1,17 @@
 package com.example.demo.app;
 
 import com.example.demo.advisor.MyLoggerAdvisor;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -32,11 +36,11 @@ public class LoveApp {
                         new MessageChatMemoryAdvisor(chatMemory),
                         new MyLoggerAdvisor()
 //                        ,new ReReadingAdvisor()
-                        )
+                )
                 .build();
     }
 
-    public String doChat(String message,String chatId) {
+    public String doChat(String message, String chatId) {
         ChatResponse chatResponse = chatClient.prompt()
                 .user(message)
                 .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
@@ -49,7 +53,8 @@ public class LoveApp {
 
     }
 
-    record LoveReport(String title, List<String> suggestions){}
+    record LoveReport(String title, List<String> suggestions) {
+    }
 
     /**
      * ai结构化输出
@@ -70,5 +75,36 @@ public class LoveApp {
         log.info("ai回答: {}", loveReport);
         return loveReport;
 
+    }
+    @Resource
+    private VectorStore loveAppVectorStore;
+
+    public String doChatLoveAppRag(String message, String chatId) {
+        ChatResponse chatResponse = chatClient.prompt()
+                .user(message)
+                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
+                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
+                .advisors(new MyLoggerAdvisor())
+                .advisors(new QuestionAnswerAdvisor(loveAppVectorStore))
+                .call()
+                .chatResponse();
+        String content = chatResponse.getResult().getOutput().getText();
+        log.info("ai回答: {}", content);
+        return content;
+    }
+    @Resource
+    private Advisor loveAppRagCloudAdvisor;
+    public String doChatLoveAppCloudRag(String message, String chatId) {
+        ChatResponse chatResponse = chatClient.prompt()
+                .user(message)
+                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
+                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
+                .advisors(new MyLoggerAdvisor())
+                .advisors(loveAppRagCloudAdvisor)
+                .call()
+                .chatResponse();
+        String content = chatResponse.getResult().getOutput().getText();
+        log.info("ai回答: {}", content);
+        return content;
     }
 }
